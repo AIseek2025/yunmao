@@ -1,0 +1,36 @@
+[package]
+name = "yunmao-media-edge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "媒体边缘节点：房间扇出 + HTTP-FLV 出口 + QoE 上报骨架"
+
+[[bin]]
+name = "yunmao-media-edge"
+path = "src/main.rs"
+
+[dependencies]
+yunmao-common.workspace = true
+yunmao-protocol.workspace = true
+yunmao-ingest = { path = "../yunmao-ingest" }
+yunmao-webrtc = { path = "../yunmao-webrtc" }
+tokio.workspace = true
+tokio-util.workspace = true
+futures.workspace = true
+bytes.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+hyper.workspace = true
+metrics.workspace = true
+metrics-exporter-prometheus.workspace = true

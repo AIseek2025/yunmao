@@ -1,0 +1,37 @@
+[package]
+name = "yunmao-webrtc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "WebRTC / WHIP / WHEP：信令路由 + H.264/AAC RTP packetizer + 与 media-edge PublisherHub 对接（ADR-0016/0018）"
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+tower.workspace = true
+hyper.workspace = true
+rand = "0.8"
+# 第七轮（A）：webrtc-rs 完整 DTLS/SRTP/ICE 栈；通过 feature flag 启用，
+# 默认 off 让 CI 在不具备 cmake/openssl/clang 的环境中也能编译。
+# 真值跑通：cd rust && cargo test -p yunmao-webrtc --features webrtc-rs
+webrtc = { version = "0.11", optional = true }
+
+[dev-dependencies]
+tokio-test.workspace = true
+tower = { version = "0.4", features = ["util"] }
+
+[features]
+# 启用真实 webrtc-rs（需要 cmake / openssl / clang 工具链）。
+webrtc-rs = ["dep:webrtc"]
+# 启用 webrtc-rs 集成测试（默认关闭）。
+webrtc-rs-it = ["webrtc-rs"]

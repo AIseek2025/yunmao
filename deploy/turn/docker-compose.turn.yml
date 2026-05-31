@@ -1,0 +1,37 @@
+version: "3.9"
+
+# yunmao TURN docker-compose（dev / staging 单实例）
+# 启动：
+#   COTURN_STATIC_AUTH_SECRET="$(openssl rand -hex 32)" \
+#   COTURN_EXTERNAL_IP=$(curl -s ifconfig.me) \
+#   docker compose -f deploy/turn/docker-compose.turn.yml up -d
+#
+# 与 ADR-0020 / ADR-0023 协同：room-svc 用同一 secret HMAC 签发 turn:username/credential。
+
+services:
+  coturn:
+    image: coturn/coturn:4.6
+    container_name: yunmao-coturn
+    network_mode: host
+    environment:
+      - COTURN_STATIC_AUTH_SECRET=${COTURN_STATIC_AUTH_SECRET:?required}
+      - COTURN_EXTERNAL_IP=${COTURN_EXTERNAL_IP:-127.0.0.1}
+    volumes:
+      - ./coturn.conf:/etc/coturn/turnserver.conf:ro
+    command:
+      - "-c"
+      - "/etc/coturn/turnserver.conf"
+    restart: unless-stopped
+
+  # https://github.com/lukd/coturn_exporter（社区维护）：把 coturn admin telnet / Prometheus 端点抓出来。
+  coturn-exporter:
+    image: ghcr.io/lukd/coturn-exporter:latest
+    container_name: yunmao-coturn-exporter
+    depends_on:
+      - coturn
+    environment:
+      - COTURN_EXPORTER_LISTEN=:9641
+      - COTURN_PROMETHEUS_URL=http://localhost:9641/metrics
+    ports:
+      - "9641:9641"
+    restart: unless-stopped

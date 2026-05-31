@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>yunmao 云养猫 · 投喂回归 Demo</title>
+    <!-- flv.js 走 CDN，离线开发可换成 vendor/flv.min.js -->
+    <script src="https://cdn.jsdelivr.net/npm/flv.js@1.6.2/dist/flv.min.js"></script>
+    <!-- hls.js LL-HLS（lowLatencyMode 自 1.4+ 支持） -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>🐈 云养猫 · 开发回归 Demo</h1>
+      <p class="muted">
+        播放 RTMP→HTTP-FLV、WebSocket 订阅、投喂状态机端到端，全部走真实底层服务。
+      </p>
+    </header>
+
+    <main>
+      <section class="card">
+        <h2>1. 服务地址</h2>
+        <div class="grid">
+          <label>media-edge HTTP-FLV
+            <input id="flvUrl" value="http://localhost:8080/live/room_demo.flv" />
+          </label>
+          <label>media-edge LL-HLS
+            <input id="hlsUrl" value="http://localhost:8080/live/room_demo/index_ll.m3u8" />
+          </label>
+          <label>protocol
+            <select id="playProto">
+              <option value="flv" selected>HTTP-FLV (兜底)</option>
+              <option value="ll-hls">LL-HLS (低延迟)</option>
+              <option value="webrtc">WebRTC WHEP (亚秒级)</option>
+            </select>
+          </label>
+          <label>WHEP endpoint
+            <input id="whepUrl" value="http://localhost:8080/whep/room_demo" />
+          </label>
+          <label>gateway WS
+            <input id="wsUrl" value="ws://localhost:8090/ws" />
+          </label>
+          <label>user-svc
+            <input id="userSvc" value="http://localhost:8201" />
+          </label>
+          <label>room-svc
+            <input id="roomSvc" value="http://localhost:8202" />
+          </label>
+          <label>feeding-svc
+            <input id="feedingSvc" value="http://localhost:8203" />
+          </label>
+          <label>chat-svc
+            <input id="chatSvc" value="http://localhost:8204" />
+          </label>
+          <label>room_id
+            <input id="roomId" value="room_demo" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2. 登录 & 订阅</h2>
+        <div class="row">
+          <input id="loginPhone" placeholder="手机号（dev mock，可空）" />
+          <button id="btnLogin">登录拿 JWT</button>
+          <button id="btnSubToken">取房间订阅 token</button>
+          <button id="btnConnectWs">连 WS</button>
+          <button id="btnSubscribe">订阅房间</button>
+        </div>
+        <div class="row">
+          <span class="kv">loginJwt:</span><code id="loginJwt">—</code>
+        </div>
+        <div class="row">
+          <span class="kv">roomToken:</span><code id="roomToken">—</code>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3. 直播 + 投喂</h2>
+        <div class="grid2">
+          <div>
+            <video id="player" controls autoplay muted style="width:100%;background:#000"></video>
+            <div class="row">
+              <button id="btnPlay">播放</button>
+              <button id="btnWhep">WHEP 播放（亚秒）</button>
+              <button id="btnFeed">触发投喂 (5g)</button>
+              <button id="btnMeta">刷新流元数据</button>
+            </div>
+            <div class="row">
+              <span class="kv">流元数据:</span><code id="streamMeta">—</code>
+            </div>
+          </div>
+          <div>
+            <h3>事件流（WS / 投喂 / 推流）</h3>
+            <pre id="log" class="log"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>4. 弹幕（chat-svc）</h2>
+        <div class="row">
+          <input id="chatInput" placeholder="发条弹幕，回车发送" />
+          <button id="btnSendChat">发送</button>
+        </div>
+        <div id="chatScroll" class="chat-scroll"></div>
+      </section>
+    </main>
+
+    <script src="./demo.js"></script>
+  </body>
+</html>

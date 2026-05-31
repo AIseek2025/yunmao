@@ -1,0 +1,167 @@
+groups:
+- name: yunmao.outbox
+  rules:
+  - alert: YunmaoOutboxPendingHigh
+    expr: sum(yunmao_outbox_relay_pending) > 1000
+    for: 5m
+    labels:
+      severity: warning
+      service: feeding-svc
+    annotations:
+      summary: "outbox pending > 1000 持续 5m"
+      description: "feeding-svc 事务性 outbox 堆积，relay 可能落后或 Kafka 不稳；当前值 {{ $value }}。"
+  - alert: YunmaoOutboxDlqGrowing
+    expr: rate(yunmao_outbox_relay_dlq_total[10m]) > 0.1
+    for: 10m
+    labels:
+      severity: critical
+      service: feeding-svc
+    annotations:
+      summary: "outbox DLQ 增长 (10m 速率 > 0.1/s)"
+      description: "DLQ 持续增长意味事件被丢入死信，请人工介入。"
+  - alert: YunmaoOutboxOldestPending
+    expr: max(yunmao_outbox_relay_oldest_pending_seconds) > 60
+    for: 5m
+    labels:
+      severity: warning
+      service: feeding-svc
+    annotations:
+      summary: "最老 outbox 行 > 60s 未发布"
+      description: "relay 滞后，请检查 Kafka 连通性。"
+
+- name: yunmao.webrtc
+  rules:
+  - alert: YunmaoWhepSessionErrorRate
+    expr: |
+      sum(rate(webrtc_signaling_errors_total{route="whep"}[5m]))
+        / clamp_min(sum(rate(webrtc_signaling_attempts_total{route="whep"}[5m])), 1)
+        > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      service: media-edge
+    annotations:
+      summary: "WHEP signaling 错误率 > 5%（10m）"
+      description: "观众侧 WebRTC 拉流频繁失败；检查 ICE/DTLS 配置或 TURN 凭证签发。"
+  - alert: YunmaoWebRtcIceFailureRate
+    expr: |
+      rate(webrtc_ice_failed_total[5m])
+        / clamp_min(rate(webrtc_ice_attempts_total[5m]), 1)
+        > 0.1
+    for: 10m
+    labels:
+      severity: warning
+      service: media-edge
+    annotations:
+      summary: "WebRTC ICE 失败率 > 10%（10m）"
+      description: "ICE 协商失败可能来自 NAT/防火墙；启用 TURN 兜底或检查 STUN 可达性。"
+
+- name: yunmao.chat
+  rules:
+  - alert: YunmaoChatHttp5xxBurst
+    expr: sum(rate(http_requests_total{service="chat-svc",status=~"5.."}[5m])) > 1
+    for: 5m
+    labels:
+      severity: warning
+      service: chat-svc
+    annotations:
+      summary: "chat-svc 5xx 速率 > 1/s（5m）"
+      description: "弹幕后端不稳；检查 PG / 敏感词外部接口。"
+  - alert: YunmaoChatRatelimitTooStrict
+    expr: |
+      sum by (room_id) (rate(chat_ratelimit_rejects_total[5m]))
+        / clamp_min(sum by (room_id) (rate(chat_messages_in_total[5m])), 1)
+        > 0.5
+    for: 10m
+    labels:
+      severity: info
+      service: chat-svc
+    annotations:
+      summary: "某房间弹幕拒绝比例 > 50%（10m）"
+      description: "可能频控阈值过低或机器人攻击；运营评估。"
+
+- name: yunmao.billing
+  rules:
+  - alert: YunmaoBillingFailureSpike
+    expr: |
+      sum(rate(billing_wallet_failures_total[5m]))
+        / clamp_min(sum(rate(billing_wallet_ops_total[5m])), 1)
+        > 0.05
+    for: 10m
+    labels:
+      severity: warning
+      service: billing-svc
+    annotations:
+      summary: "billing 失败率 > 5%（10m）"
+      description: "钱包 saga reserve/confirm/cancel 失败比例升高；检查 PG / outbox / Kafka。"
+  - alert: YunmaoBillingHoldsBacklog
+    expr: |
+      sum(billing_wallet_holds_reserved) > 5000
+    for: 15m
+    labels:
+      severity: info
+      service: billing-svc
+    annotations:
+      summary: "未结清的 wallet hold 累计 > 5000（15m）"
+      description: "可能 feeding-svc confirm/cancel 调用受阻；检查链路与 timeout 配置。"
+
+- name: yunmao.mqtt-bridge
+  rules:
+  - alert: YunmaoDeviceBridgeCmdError
+    expr: rate(yunmao_device_bridge_cmd_err_total[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+      service: device-svc
+    annotations:
+      summary: "device-svc bridge cmd 发送错误率 > 5%"
+      description: "MQTT 推送失败率上升；当前 {{ $value }}。"
+  - alert: YunmaoDeviceBridgeEvtError
+    expr: rate(yunmao_device_bridge_evt_err_total[5m]) > 0.05
+    for: 5m
+    labels:
+      severity: warning
+      service: device-svc
+    annotations:
+      summary: "device-svc bridge 事件错误率 > 5%"
+
+- name: yunmao.gateway
+  rules:
+  - alert: YunmaoGatewayAuthFailHigh
+    expr: rate(gateway_auth_fail_total[5m]) / (rate(gateway_auth_ok_total[5m]) + rate(gateway_auth_fail_total[5m])) > 0.1
+    for: 10m
+    labels:
+      severity: warning
+      service: gateway
+    annotations:
+      summary: "WS 鉴权失败比例 > 10%"
+  - alert: YunmaoGatewayFanoutLatencyHigh
+    expr: histogram_quantile(0.95, sum(rate(gateway_fanout_latency_seconds_bucket[5m])) by (le)) > 0.5
+    for: 5m
+    labels:
+      severity: warning
+      service: gateway
+    annotations:
+      summary: "Fanout P95 延迟 > 500ms"
+
+- name: yunmao.ll-hls
+  rules:
+  - alert: YunmaoLlHlsManifest404Rate
+    expr: rate(media_edge_ll_hls_manifest_requests_total{status="404"}[5m]) /
+          rate(media_edge_ll_hls_manifest_requests_total[5m]) > 0.2
+    for: 5m
+    labels:
+      severity: warning
+      service: media-edge
+    annotations:
+      summary: "LL-HLS playlist 404 比例 > 20%"
+      description: "推流可能未发出，或 SPS/PPS 未送达。"
+  - alert: YunmaoLlHlsBlockingReloadStuck
+    expr: histogram_quantile(0.95, sum(rate(media_edge_ll_hls_playlist_block_seconds_bucket[5m])) by (le)) > 5
+    for: 5m
+    labels:
+      severity: warning
+      service: media-edge
+    annotations:
+      summary: "LL-HLS blocking reload P95 > 5s"
+      description: "媒体产出滞后；hls.js 可能持续等待 PRELOAD-HINT。"

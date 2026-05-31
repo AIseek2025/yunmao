@@ -1,0 +1,88 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao MQTT Bridge",
+  "uid": "yunmao-mqtt-bridge",
+  "version": 1,
+  "tags": ["yunmao", "mqtt", "device"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Commands Kafka→MQTT (in/out)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(yunmao_device_bridge_cmd_in_total[1m])", "refId": "A", "legendFormat": "in {{topic}}" },
+        { "expr": "rate(yunmao_device_bridge_cmd_out_total[1m])", "refId": "B", "legendFormat": "out {{device_id}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Command publish latency (P50/P95/P99)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(yunmao_device_bridge_cmd_out_latency_seconds_bucket[5m])) by (le))", "refId": "A", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(yunmao_device_bridge_cmd_out_latency_seconds_bucket[5m])) by (le))", "refId": "B", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(yunmao_device_bridge_cmd_out_latency_seconds_bucket[5m])) by (le))", "refId": "C", "legendFormat": "P99" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Device events MQTT→Kafka (in/out)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(yunmao_device_bridge_evt_in_total[1m])", "refId": "A", "legendFormat": "in {{event_type}}" },
+        { "expr": "rate(yunmao_device_bridge_evt_out_total[1m])", "refId": "B", "legendFormat": "out {{topic}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Errors (cmd + evt)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "rate(yunmao_device_bridge_cmd_err_total[1m])", "refId": "A", "legendFormat": "cmd {{reason}}" },
+        { "expr": "rate(yunmao_device_bridge_evt_err_total[1m])", "refId": "B", "legendFormat": "evt {{reason}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "EMQX online clients (scrape from EMQX node_exporter)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum(emqx_connections_count)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "EMQX subscriptions",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 16 },
+      "targets": [
+        { "expr": "sum(emqx_subscriptions_count)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Bridge cmd→ack RTT median (sec)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(yunmao_device_bridge_cmd_out_latency_seconds_bucket[5m])) by (le))", "refId": "A" }
+      ]
+    }
+  ]
+}

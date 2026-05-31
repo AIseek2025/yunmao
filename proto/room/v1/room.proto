@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package yunmao.room.v1;
+option go_package = "yunmao.live/proto/room/v1;roompb";
+
+import "google/protobuf/timestamp.proto";
+
+service RoomService {
+  rpc GetRoom (GetRoomRequest) returns (Room);
+  rpc ListRooms (ListRoomsRequest) returns (ListRoomsResponse);
+  rpc PublishEvent (PublishEventRequest) returns (PublishEventResponse);  // 内部：发布事件到 realtime gateway
+}
+
+message Room {
+  string id = 1;
+  string cat_id = 2;
+  string display_name = 3;
+  string city = 4;
+  string visibility = 5;     // public/private/audit
+  string live_status = 6;    // online/offline/maintenance
+  string feeding_status = 7; // open/closed
+  uint32 feed_cooldown_seconds = 8;
+  google.protobuf.Timestamp created_at = 9;
+}
+
+message GetRoomRequest { string id = 1; }
+
+message ListRoomsRequest {
+  string visibility = 1;
+  uint32 page_size = 2;
+  string page_token = 3;
+}
+message ListRoomsResponse {
+  repeated Room rooms = 1;
+  string next_page_token = 2;
+}
+
+message PublishEventRequest {
+  string room_id = 1;
+  string event_type = 2;
+  bytes data_json = 3;
+}
+message PublishEventResponse { uint32 delivered = 1; }

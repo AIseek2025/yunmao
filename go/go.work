@@ -1,0 +1,15 @@
+go 1.23
+
+use (
+	./pkg/yunmao
+	./proto
+	./services/admin-svc
+	./services/billing-svc
+	./services/chat-svc
+	./services/device-svc
+	./services/feeding-svc
+	./services/room-svc
+	./services/user-svc
+	./test/e2e
+	../clients/cat-feeder-sim
+)

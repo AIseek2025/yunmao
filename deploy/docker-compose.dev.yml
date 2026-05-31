@@ -1,0 +1,154 @@
+name: yunmao-dev
+
+# 本地一键起所有基础设施。仅用于开发，不要复用到生产。
+# 使用方式：在仓库根目录执行 `make dev-up`，关闭用 `make dev-down`。
+# 暴露端口尽量贴近默认值，便于 docs / dashboards 引用。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: yunmao-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: yunmao
+      POSTGRES_PASSWORD: yunmao
+      POSTGRES_DB: yunmao
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../go/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yunmao"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: yunmao-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: yunmao-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafkadata:/bitnami/kafka
+
+  emqx:
+    image: emqx/emqx:5.7
+    container_name: yunmao-emqx
+    restart: unless-stopped
+    environment:
+      EMQX_NAME: "yunmao-emqx"
+      EMQX_HOST: "127.0.0.1"
+      # 开启默认 anonymous（仅本地开发）；生产请通过 ACL 配置
+      EMQX_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "1883:1883"     # MQTT v3.1.1 / v5
+      - "8083:8083"     # MQTT over WebSocket
+      - "8084:8084"     # MQTT over WSS
+      - "8883:8883"     # MQTT over TLS
+      - "18083:18083"   # Dashboard
+    healthcheck:
+      test: ["CMD", "emqx", "ctl", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  minio:
+    image: minio/minio:latest
+    container_name: yunmao-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: yunmao
+      MINIO_ROOT_PASSWORD: yunmao12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: yunmao-clickhouse
+    restart: unless-stopped
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    ports:
+      - "8123:8123"
+      - "9009:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: yunmao-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: yunmao-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/prometheus/alerts:/etc/prometheus/alerts:ro
+      - promdata:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: yunmao-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: yunmao
+      GF_SECURITY_ADMIN_PASSWORD: yunmao
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafanadata:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  kafkadata:
+  miniodata:
+  chdata:
+  promdata:
+  grafanadata:

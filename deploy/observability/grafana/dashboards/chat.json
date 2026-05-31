@@ -1,0 +1,48 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao Chat (Danmaku)",
+  "uid": "yunmao-chat",
+  "version": 1,
+  "tags": ["yunmao", "chat", "danmaku"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Chat messages in (rate by room)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum by (room_id) (rate(chat_messages_in_total[1m]))", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Chat ratelimit rejects (5m rate)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "sum by (room_id, reason) (rate(chat_ratelimit_rejects_total[5m]))", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Chat moderation actions (5m rate)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 6 },
+      "targets": [{ "expr": "sum by (action) (rate(chat_moderation_total[5m]))", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Chat HTTP 5xx",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 12 },
+      "targets": [{
+        "expr": "sum by (route) (rate(http_requests_total{service=\"chat-svc\",status=~\"5..\"}[5m]))",
+        "refId": "A"
+      }]
+    }
+  ]
+}

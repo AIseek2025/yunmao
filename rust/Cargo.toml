@@ -1,0 +1,80 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/yunmao-common",
+    "crates/yunmao-protocol",
+    "crates/yunmao-ingest",
+    "crates/yunmao-media-edge",
+    "crates/yunmao-gateway",
+    "crates/yunmao-device-edge",
+    "crates/yunmao-eventbus",
+    "crates/yunmao-redis",
+    "crates/yunmao-webrtc",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.94"
+license = "Apache-2.0"
+authors = ["yunmao platform <dev@yunmao.live>"]
+repository = "https://example.com/yunmao/yunmao"
+
+[workspace.dependencies]
+# 异步运行时与基础工具
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec", "io"] }
+futures = "0.3"
+async-trait = "0.1"
+bytes = "1"
+
+# 错误处理
+thiserror = "1"
+anyhow = "1"
+
+# 日志 / Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 时间 / ID
+time = { version = "0.3", features = ["serde-human-readable", "macros"] }
+ulid = { version = "1", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+
+# HTTP / WebSocket
+axum = { version = "0.7", features = ["ws", "macros"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["trace", "cors", "compression-gzip"] }
+hyper = { version = "1", features = ["full"] }
+tokio-tungstenite = "0.21"
+
+# 媒体 / RTMP
+rml_amf0 = "0.3"
+rml_rtmp = "0.8"
+
+# 指标
+metrics = "0.22"
+metrics-exporter-prometheus = "0.13"
+prometheus = "0.13"
+
+# 测试
+tokio-test = "0.4"
+proptest = "1"
+
+# 内部 crates
+yunmao-common = { path = "crates/yunmao-common" }
+yunmao-protocol = { path = "crates/yunmao-protocol" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+opt-level = 1
+debug = true

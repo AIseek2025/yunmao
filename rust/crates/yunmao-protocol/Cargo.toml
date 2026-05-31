@@ -1,0 +1,15 @@
+[package]
+name = "yunmao-protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "yunmao 内部协议：直播信令、设备 MQTT、内部事件"
+
+[dependencies]
+yunmao-common.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true

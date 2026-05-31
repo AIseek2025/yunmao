@@ -1,0 +1,48 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao Billing (Wallet Saga)",
+  "uid": "yunmao-billing",
+  "version": 1,
+  "tags": ["yunmao", "billing", "saga"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Wallet ops rate (reserve/confirm/cancel)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum by (op) (rate(billing_wallet_ops_total[1m]))", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Wallet ops failures (5m rate)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "sum by (op, reason) (rate(billing_wallet_failures_total[5m]))", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Reserved fen (sum)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 6 },
+      "targets": [{ "expr": "sum(billing_wallet_reserved_fen)", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "feeding-svc → billing-svc HTTP latency (p95)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 6 },
+      "targets": [{
+        "expr": "histogram_quantile(0.95, sum by (le, op) (rate(feeding_billing_call_seconds_bucket[5m])))",
+        "refId": "A"
+      }]
+    }
+  ]
+}

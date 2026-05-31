@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yunmao.live/schemas/cloudevents/envelope.json",
+  "title": "yunmao CloudEvents 1.0 envelope",
+  "description": "yunmao 平台 Kafka 事件总线统一信封；data 字段的 schema 在各 topic 单独定义。",
+  "type": "object",
+  "required": ["id", "source", "type", "time", "data"],
+  "properties": {
+    "id": { "type": "string", "description": "UUIDv4，幂等键" },
+    "source": { "type": "string", "description": "服务名 + 实例 ID，如 feeding-svc@dev-1" },
+    "type": { "type": "string", "description": "topic 名，如 feed.command.requested" },
+    "subject": { "type": "string", "description": "业务主键，如 feed_request_id / room_id / device_id" },
+    "time": { "type": "string", "format": "date-time" },
+    "specversion": { "type": "string", "const": "1.0" },
+    "dataschema": { "type": "string", "description": "Schema 注册中心 URI + 版本（可空）" },
+    "datacontenttype": { "type": "string", "default": "application/json" },
+    "data": {}
+  },
+  "additionalProperties": false
+}

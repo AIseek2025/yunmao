@@ -1,0 +1,355 @@
+name: yunmao-prod
+
+services:
+  postgres-prod:
+    image: postgres:16-alpine
+    container_name: yunmao-postgres-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${YUNMAO_DB_NAME:-yunmao}
+      POSTGRES_USER: ${YUNMAO_DB_USER:-yunmao}
+      POSTGRES_PASSWORD: ${YUNMAO_DB_PASSWORD:-changeme}
+    volumes:
+      - prod_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${YUNMAO_DB_USER:-yunmao}"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  redis-prod:
+    image: redis:7-alpine
+    container_name: yunmao-redis-prod
+    restart: unless-stopped
+    volumes:
+      - prod_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka-prod:
+    image: apache/kafka:3.8.0
+    container_name: yunmao-kafka-prod
+    hostname: kafka-prod
+    restart: unless-stopped
+    user: "0:0"
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-prod:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-prod:9093"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - prod_kafka_data:/tmp/kraft-combined-logs
+
+  user-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: user-svc
+    image: yunmao/user-svc:ecs
+    container_name: yunmao-user-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_USER_LISTEN: ":8101"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-prod:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_JWT_ALG: ${YUNMAO_JWT_ALG:-RS256}
+      YUNMAO_JWT_RS_KID: ${YUNMAO_JWT_RS_KID:-yunmao-user-svc}
+      YUNMAO_JWT_RS_PRIVATE_KEY_PATH: ${YUNMAO_JWT_RS_PRIVATE_KEY_PATH:-/run/secrets/jwt-rs-private.pem}
+      YUNMAO_JWT_AUDIENCE: ${YUNMAO_JWT_AUDIENCE:-yunmao.gateway}
+    volumes:
+      - ${YUNMAO_SECRETS_DIR:-/opt/yunmao/shared/secrets}:/run/secrets:ro
+    ports:
+      - "127.0.0.1:28101:8101"
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+
+  room-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: room-svc
+    image: yunmao/room-svc:ecs
+    container_name: yunmao-room-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_ROOM_LISTEN: ":8102"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-prod:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_JWT_ALG: ${YUNMAO_JWT_ALG:-RS256}
+      YUNMAO_JWT_RS_KID: ${YUNMAO_JWT_RS_KID:-yunmao-user-svc}
+      YUNMAO_JWT_RS_PRIVATE_KEY_PATH: ${YUNMAO_JWT_RS_PRIVATE_KEY_PATH:-/run/secrets/jwt-rs-private.pem}
+      YUNMAO_JWKS_ENDPOINTS: ${YUNMAO_JWKS_ENDPOINTS:-http://user-svc:8101/jwks.json}
+      YUNMAO_JWT_AUDIENCE: ${YUNMAO_JWT_AUDIENCE:-yunmao.gateway}
+      YUNMAO_ALLOW_GUEST: ${YUNMAO_ALLOW_GUEST:-true}
+      YUNMAO_TURN_SHARED_SECRET: ${YUNMAO_TURN_SHARED_SECRET:-}
+      YUNMAO_TURN_SHARED_SECRET_LEGACY: ${YUNMAO_TURN_SHARED_SECRET_LEGACY:-}
+      YUNMAO_STUN_URLS: ${YUNMAO_STUN_URLS:-stun:stun.l.google.com:19302}
+      YUNMAO_TURN_HOSTS: ${YUNMAO_TURN_HOSTS:-yunmao.net.cn}
+      YUNMAO_TURN_PORTS: ${YUNMAO_TURN_PORTS:-3478}
+    volumes:
+      - ${YUNMAO_SECRETS_DIR:-/opt/yunmao/shared/secrets}:/run/secrets:ro
+    ports:
+      - "127.0.0.1:28102:8102"
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      user-svc:
+        condition: service_started
+
+  feeding-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: feeding-svc
+    image: yunmao/feeding-svc:ecs
+    container_name: yunmao-feeding-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_FEEDING_LISTEN: ":8201"
+      YUNMAO_FEEDING_GRPC_LISTEN: ":9203"
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-prod:9092
+      YUNMAO_CACHE_BACKEND: redis
+      YUNMAO_REDIS_URL: redis://redis-prod:6379/0
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-prod:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+    ports:
+      - "127.0.0.1:28201:8201"
+      - "127.0.0.1:29203:9203"
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      redis-prod:
+        condition: service_healthy
+      kafka-prod:
+        condition: service_started
+
+  device-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: device-svc
+    image: yunmao/device-svc:ecs
+    container_name: yunmao-device-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_DEVICE_LISTEN: ":8103"
+      YUNMAO_FEEDING_GRPC_ADDR: feeding-svc:9203
+    ports:
+      - "127.0.0.1:28103:8103"
+    depends_on:
+      feeding-svc:
+        condition: service_started
+
+  billing-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: billing-svc
+    image: yunmao/billing-svc:ecs
+    container_name: yunmao-billing-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_BILLING_LISTEN: ":8104"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-prod:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_ENABLE_WECHAT: ${YUNMAO_ENABLE_WECHAT:-false}
+      YUNMAO_ENABLE_ALIPAY: ${YUNMAO_ENABLE_ALIPAY:-false}
+      YUNMAO_ENABLE_APPLEIAP: ${YUNMAO_ENABLE_APPLEIAP:-false}
+      YUNMAO_WECHAT_API_CLIENT_KEY_PATH: ${YUNMAO_WECHAT_API_CLIENT_KEY_PATH:-}
+      YUNMAO_WECHAT_PLATFORM_PUBLIC_KEY_PATH: ${YUNMAO_WECHAT_PLATFORM_PUBLIC_KEY_PATH:-}
+      YUNMAO_ALIPAY_PRIVATE_KEY_PEM_PATH: ${YUNMAO_ALIPAY_PRIVATE_KEY_PEM_PATH:-}
+      YUNMAO_ALIPAY_PUBLIC_KEY_PATH: ${YUNMAO_ALIPAY_PUBLIC_KEY_PATH:-}
+      YUNMAO_APPLE_ROOT_CA_PATH: ${YUNMAO_APPLE_ROOT_CA_PATH:-}
+    volumes:
+      - ${YUNMAO_SECRETS_DIR:-/opt/yunmao/shared/secrets}:/run/secrets:ro
+    ports:
+      - "127.0.0.1:28104:8104"
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+
+  admin-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: admin-svc
+    image: yunmao/admin-svc:ecs
+    container_name: yunmao-admin-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_ADMIN_LISTEN: ":8105"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-prod:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_BILLING_URL: http://billing-svc:8104
+      YUNMAO_ROOM_URL: http://room-svc:8102
+      YUNMAO_JWT_RS_PRIVATE_KEY_PATH: ${YUNMAO_JWT_RS_PRIVATE_KEY_PATH:-/run/secrets/jwt-rs-private.pem}
+      YUNMAO_ADMIN_PASSWORD: ${YUNMAO_ADMIN_PASSWORD:-changeme-admin}
+    volumes:
+      - ${YUNMAO_SECRETS_DIR:-/opt/yunmao/shared/secrets}:/run/secrets:ro
+    ports:
+      - "127.0.0.1:28105:8105"
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      billing-svc:
+        condition: service_started
+      room-svc:
+        condition: service_started
+
+  chat-svc:
+    build:
+      context: ..
+      dockerfile: go/Dockerfile
+      args:
+        SVC: chat-svc
+    image: yunmao/chat-svc:ecs
+    container_name: yunmao-chat-svc-prod
+    restart: unless-stopped
+    environment:
+      YUNMAO_CHAT_LISTEN: ":8204"
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-prod:9092
+      YUNMAO_CACHE_BACKEND: redis
+      YUNMAO_REDIS_URL: redis://redis-prod:6379/0
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-prod:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+    ports:
+      - "127.0.0.1:28204:8204"
+    depends_on:
+      postgres-prod:
+        condition: service_healthy
+      redis-prod:
+        condition: service_healthy
+      kafka-prod:
+        condition: service_started
+
+  media-edge:
+    build:
+      context: ../rust
+      dockerfile: Dockerfile
+      args:
+        BIN: yunmao-media-edge
+    image: yunmao/media-edge:ecs
+    container_name: yunmao-media-edge-prod
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,yunmao=debug}
+    ports:
+      - "127.0.0.1:28080:8080"
+      - "127.0.0.1:19350:1935"
+
+  gateway:
+    build:
+      context: ../rust
+      dockerfile: Dockerfile
+      args:
+        BIN: yunmao-gateway
+    image: yunmao/gateway:ecs
+    container_name: yunmao-gateway-prod
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,yunmao=debug}
+      YUNMAO_GATEWAY_LISTEN: 0.0.0.0:8090
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-prod:9092
+      YUNMAO_JWKS_ENDPOINTS: ${YUNMAO_JWKS_ENDPOINTS:-http://user-svc:8101/jwks.json}
+      YUNMAO_JWT_SECRET: ${YUNMAO_JWT_SECRET:-}
+      YUNMAO_GATEWAY_ALLOW_GUEST: ${YUNMAO_GATEWAY_ALLOW_GUEST:-true}
+      YUNMAO_GATEWAY_GUEST_ROOMS: ${YUNMAO_GATEWAY_GUEST_ROOMS:-room_demo}
+    ports:
+      - "127.0.0.1:28090:8090"
+    depends_on:
+      user-svc:
+        condition: service_started
+      kafka-prod:
+        condition: service_started
+
+  device-edge:
+    build:
+      context: ../rust
+      dockerfile: Dockerfile
+      args:
+        BIN: yunmao-device-edge
+    image: yunmao/device-edge:ecs
+    container_name: yunmao-device-edge-prod
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,yunmao=debug}
+      YUNMAO_DEVICE_EDGE_LISTEN: 0.0.0.0:8091
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-prod:9092
+      YUNMAO_FEED_ACK_URL: ${YUNMAO_FEED_ACK_URL:-http://feeding-svc:8201/internal/feed-acks}
+    ports:
+      - "127.0.0.1:28091:8091"
+    depends_on:
+      feeding-svc:
+        condition: service_started
+      kafka-prod:
+        condition: service_started
+
+  web:
+    build:
+      context: ../clients/web
+      dockerfile: ../../deploy/Dockerfile.web
+    image: yunmao/web:ecs
+    container_name: yunmao-web-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-https://yunmao.net.cn}
+      NEXT_PUBLIC_WS_BASE: ${NEXT_PUBLIC_WS_BASE:-wss://yunmao.net.cn/ws}
+      NEXT_PUBLIC_MEDIA_BASE: ${NEXT_PUBLIC_MEDIA_BASE:-https://yunmao.net.cn}
+    ports:
+      - "127.0.0.1:23000:3000"
+    depends_on:
+      user-svc:
+        condition: service_started
+      room-svc:
+        condition: service_started
+      media-edge:
+        condition: service_started
+      gateway:
+        condition: service_started
+
+  admin-web:
+    build:
+      context: ../clients/admin
+      dockerfile: ../../deploy/Dockerfile.admin
+      args:
+        YUNMAO_ADMIN_BASE_PATH: ${YUNMAO_ADMIN_BASE_PATH:-/admin}
+        NEXT_PUBLIC_ADMIN_API_BASE: ${NEXT_PUBLIC_ADMIN_API_BASE:-https://yunmao.net.cn/admin-api}
+        NEXT_PUBLIC_AUTH_API_BASE: ${NEXT_PUBLIC_AUTH_API_BASE:-https://yunmao.net.cn/admin-api}
+    image: yunmao/admin-web:ecs
+    container_name: yunmao-admin-web-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      YUNMAO_ADMIN_BASE_PATH: ${YUNMAO_ADMIN_BASE_PATH:-/admin}
+      NEXT_PUBLIC_ADMIN_API_BASE: ${NEXT_PUBLIC_ADMIN_API_BASE:-https://yunmao.net.cn/admin-api}
+      NEXT_PUBLIC_AUTH_API_BASE: ${NEXT_PUBLIC_AUTH_API_BASE:-https://yunmao.net.cn/admin-api}
+    ports:
+      - "127.0.0.1:23100:3100"
+    depends_on:
+      admin-svc:
+        condition: service_started
+
+volumes:
+  prod_pg_data:
+  prod_redis_data:
+  prod_kafka_data:

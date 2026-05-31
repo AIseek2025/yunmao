@@ -1,0 +1,61 @@
+# sqlc 编排：每个服务一个独立 codegen 入口。
+#
+# 现状（第四轮）：
+#   - 各 service 的 internal/store/store.go 仍是手写 pgx 实现（const SQL 与下方 queries.sql 1:1）。
+#   - 本配置已经就绪：开发机装好 sqlc 二进制后跑 `sqlc generate` 即可输出
+#     internal/store/gen/，按需把 *Store 改为 wrapper 转发到 sqlc Queries（编译期约束更强）。
+#   - schema.sql 只在 sqlc 编译期用（类型推导），运行时仍以 go/migrations/*.sql 为准。
+#
+# 运行：
+#   cd go && sqlc generate
+version: "2"
+sql:
+  - engine: postgresql
+    queries: services/feeding-svc/internal/store/sql/queries.sql
+    schema:  services/feeding-svc/internal/store/sql/schema.sql
+    gen:
+      go:
+        package: gen
+        out: services/feeding-svc/internal/store/gen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+
+  - engine: postgresql
+    queries: services/user-svc/internal/store/sql/queries.sql
+    schema:  services/user-svc/internal/store/sql/schema.sql
+    gen:
+      go:
+        package: gen
+        out: services/user-svc/internal/store/gen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+
+  - engine: postgresql
+    queries: services/billing-svc/internal/store/sql/queries.sql
+    schema:  services/billing-svc/internal/store/sql/schema.sql
+    gen:
+      go:
+        package: gen
+        out: services/billing-svc/internal/store/gen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+
+  - engine: postgresql
+    queries: services/room-svc/internal/store/sql/queries.sql
+    schema:  services/room-svc/internal/store/sql/schema.sql
+    gen:
+      go:
+        package: gen
+        out: services/room-svc/internal/store/gen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+
+  - engine: postgresql
+    queries: services/device-svc/internal/store/sql/queries.sql
+    schema:  services/device-svc/internal/store/sql/schema.sql
+    gen:
+      go:
+        package: gen
+        out: services/device-svc/internal/store/gen
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true

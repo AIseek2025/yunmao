@@ -1,0 +1,79 @@
+version: "3.9"
+
+# WS 多实例基准压测编排。
+# 启动：
+#   docker compose -f scripts/perf/docker-compose.bench.yml up --build
+# 跑压测：
+#   bash scripts/perf/ws-baseline-run.sh \
+#     -e YUNMAO_BENCH_URL_LIST=ws://localhost:18091/ws,ws://localhost:18092/ws,ws://localhost:18093/ws \
+#     -e YUNMAO_BENCH_CONNS=50000
+#
+# sysctl/ulimits 在容器层显式提升；宿主机仍受 docker desktop / Linux 内核上限约束。
+
+x-gateway-base: &gateway-base
+  image: yunmao-gateway:bench
+  build:
+    context: ../..
+    dockerfile: rust/crates/yunmao-gateway/Dockerfile
+  depends_on:
+    - redis
+  environment:
+    - YUNMAO_GATEWAY_REDIS_URL=redis://redis:6379/0
+    # ADR-0019 第七轮起 HS256 已下线；本地压测需要先启动 user-svc/room-svc 暴露 JWKS。
+    - YUNMAO_JWT_ALG=RS256
+    - YUNMAO_JWKS_ENDPOINTS=http://host.docker.internal:8101/jwks.json
+    - RUST_LOG=info
+  ulimits:
+    nofile:
+      soft: 1048576
+      hard: 1048576
+    nproc: 65535
+  sysctls:
+    net.core.somaxconn: 65535
+    net.ipv4.tcp_max_syn_backlog: 65535
+    net.ipv4.tcp_tw_reuse: 1
+    net.ipv4.ip_local_port_range: 10000 65535
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+  gateway-1:
+    <<: *gateway-base
+    environment:
+      - YUNMAO_GATEWAY_LISTEN=0.0.0.0:18091
+      - YUNMAO_GATEWAY_INSTANCE_ID=gw-1
+      - YUNMAO_GATEWAY_REDIS_URL=redis://redis:6379/0
+      - YUNMAO_JWT_ALG=RS256
+      - YUNMAO_JWKS_ENDPOINTS=http://host.docker.internal:8101/jwks.json
+    ports:
+      - "18091:18091"
+
+  gateway-2:
+    <<: *gateway-base
+    environment:
+      - YUNMAO_GATEWAY_LISTEN=0.0.0.0:18092
+      - YUNMAO_GATEWAY_INSTANCE_ID=gw-2
+      - YUNMAO_GATEWAY_REDIS_URL=redis://redis:6379/0
+      - YUNMAO_JWT_ALG=RS256
+      - YUNMAO_JWKS_ENDPOINTS=http://host.docker.internal:8101/jwks.json
+    ports:
+      - "18092:18092"
+
+  gateway-3:
+    <<: *gateway-base
+    environment:
+      - YUNMAO_GATEWAY_LISTEN=0.0.0.0:18093
+      - YUNMAO_GATEWAY_INSTANCE_ID=gw-3
+      - YUNMAO_GATEWAY_REDIS_URL=redis://redis:6379/0
+      - YUNMAO_JWT_ALG=RS256
+      - YUNMAO_JWKS_ENDPOINTS=http://host.docker.internal:8101/jwks.json
+    ports:
+      - "18093:18093"

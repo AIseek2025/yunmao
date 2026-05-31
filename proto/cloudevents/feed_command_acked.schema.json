@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yunmao.live/schemas/feed.command.acked/v1.json",
+  "title": "feed.command.acked data v1",
+  "type": "object",
+  "required": [
+    "feed_request_id",
+    "device_command_id",
+    "device_id",
+    "room_id",
+    "status",
+    "executed_at"
+  ],
+  "properties": {
+    "feed_request_id": { "type": "string" },
+    "device_command_id": { "type": "string" },
+    "device_id": { "type": "string" },
+    "room_id": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "jammed", "insufficient_food", "timeout"]
+    },
+    "actual_amount_grams": { "type": "integer", "minimum": 0 },
+    "remaining_food_grams": { "type": "integer", "minimum": 0 },
+    "executed_at": { "type": "string", "format": "date-time" },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

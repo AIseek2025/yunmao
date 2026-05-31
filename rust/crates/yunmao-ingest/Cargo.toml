@@ -1,0 +1,31 @@
+[package]
+name = "yunmao-ingest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "RTMP / SRT / WHIP 推流接入（首期 RTMP 完整实现）"
+
+[dependencies]
+yunmao-common.workspace = true
+yunmao-protocol.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+bytes.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+rml_amf0.workspace = true
+rml_rtmp.workspace = true
+
+[dev-dependencies]
+tokio-test.workspace = true
+
+[lib]
+path = "src/lib.rs"

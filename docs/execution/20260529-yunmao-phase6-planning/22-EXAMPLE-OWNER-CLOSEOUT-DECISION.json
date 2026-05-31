@@ -1,0 +1,56 @@
+{
+  "project": "yunmao",
+  "decision_date": "2026-05-29",
+  "batch_id": "20260529-owner-closeout-round1",
+  "decision": "continue_closeout",
+  "summary": "Keep the project in closeout mode because Payments/IAP, TURN, Rust data-plane, and JWT/JWKS still require final evidence or external inputs.",
+  "owner_semantics": {
+    "next_task_type": "planning",
+    "owner_action": "request_planning",
+    "dispatch_ready": false
+  },
+  "blockers": [
+    {
+      "name": "Payments / IAP",
+      "status": "external_wait",
+      "owner": "payments_owner",
+      "evidence": "reports/closeout/20260529-payments-iap-round1/payments_iap_writeback.md",
+      "next_action": "Wait for real sandbox credentials and rerun diagnostics."
+    },
+    {
+      "name": "TURN / RTC",
+      "status": "infra_blocked",
+      "owner": "rtc_infra_owner",
+      "evidence": "reports/closeout/20260529-turn-rtc-round1/turn_rtc_writeback.md",
+      "next_action": "Provide TURN shared secret or hosted infra and recheck ice-servers response."
+    },
+    {
+      "name": "Rust data-plane",
+      "status": "runtime_blocked",
+      "owner": "platform_owner",
+      "evidence": "reports/closeout/20260529-rust-jwt-round1/rust_jwt_writeback.md",
+      "next_action": "Produce new staging startup evidence for gateway, device-edge, and media-edge."
+    },
+    {
+      "name": "JWT / JWKS",
+      "status": "runtime_blocked",
+      "owner": "auth_gateway_owner",
+      "evidence": "reports/closeout/20260529-rust-jwt-round1/jwt_jwks_alignment.md",
+      "next_action": "Clarify issuer, verifier, JWKS publish/consume path, then rerun cross-service smoke."
+    }
+  ],
+  "why_not_open_new_phase": [
+    "Remaining issues are closeout blockers rather than new feature objectives.",
+    "Starting a new phase now would blur owner semantics and hide unresolved integration gaps."
+  ],
+  "why_not_archive_current_phase": [
+    "The project still needs fresh evidence and explicit blocker ownership before archive.",
+    "Governance artifacts would drift from actual blocker state if archived too early."
+  ],
+  "recommended_outputs": [
+    "owner_closeout_decision.md",
+    "owner_closeout_decision.json",
+    "blocker_closure_matrix.md",
+    "next_action_recommendation.md"
+  ]
+}

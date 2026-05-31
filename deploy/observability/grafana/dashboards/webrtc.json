@@ -1,0 +1,59 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao WebRTC (WHIP/WHEP)",
+  "uid": "yunmao-webrtc",
+  "version": 1,
+  "tags": ["yunmao", "webrtc", "whip", "whep"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "WHIP publishers active",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum(webrtc_publishers_active)", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "WHEP subscribers active",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [{ "expr": "sum(webrtc_subscribers_active)", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "RTP packets out (rate)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 4 },
+      "targets": [{ "expr": "sum by (kind) (rate(webrtc_rtp_packets_total[1m]))", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "ICE failure ratio (5m)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 4 },
+      "targets": [{
+        "expr": "rate(webrtc_ice_failed_total[5m]) / clamp_min(rate(webrtc_ice_attempts_total[5m]), 1)",
+        "refId": "A"
+      }]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "WHIP/WHEP signaling errors (5m rate)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 10 },
+      "targets": [{
+        "expr": "sum by (route, code) (rate(webrtc_signaling_errors_total[5m]))",
+        "refId": "A"
+      }]
+    }
+  ]
+}

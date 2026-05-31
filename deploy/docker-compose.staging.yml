@@ -1,0 +1,248 @@
+# Staging 部署配置（image-based 默认入口）
+# 使用方式：docker compose -f deploy/docker-compose.staging.yml up -d
+# 当前 `make app-up-staging` / `make deploy-staging` 默认使用本文件。
+# 本文件与当前 smoke / service matrix 对齐，供 staging 发布直接使用。
+
+name: yunmao-staging
+
+services:
+  postgres-staging:
+    image: postgres:16-alpine
+    container_name: yunmao-postgres-staging
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${YUNMAO_DB_NAME:-yunmao}
+      POSTGRES_USER: ${YUNMAO_DB_USER:-yunmao}
+      POSTGRES_PASSWORD: ${YUNMAO_DB_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - staging_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${YUNMAO_DB_USER:-yunmao}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis-staging:
+    image: redis:7-alpine
+    container_name: yunmao-redis-staging
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - staging_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka-staging:
+    image: bitnami/kafka:3.7
+    container_name: yunmao-kafka-staging
+    restart: unless-stopped
+    environment:
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "controller,broker"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka-staging:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-staging:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+    ports:
+      - "9092:9092"
+    volumes:
+      - staging_kafka_data:/bitnami/kafka
+
+  user-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-user-svc:${TAG:-latest}
+    container_name: yunmao-user-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_USER_LISTEN: ":8101"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-staging:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_JWT_ALG: ${YUNMAO_JWT_ALG:-RS256}
+      YUNMAO_JWT_RS_KID: ${YUNMAO_JWT_RS_KID:-}
+      YUNMAO_JWT_RS_PRIVATE_KEY_PATH: ${YUNMAO_JWT_RS_PRIVATE_KEY_PATH:-}
+      YUNMAO_JWT_AUDIENCE: ${YUNMAO_JWT_AUDIENCE:-yunmao.gateway}
+    ports:
+      - "8101:8101"
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+
+  room-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-room-svc:${TAG:-latest}
+    container_name: yunmao-room-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_ROOM_LISTEN: ":8102"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-staging:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_JWT_ALG: ${YUNMAO_JWT_ALG:-RS256}
+      YUNMAO_JWT_RS_KID: ${YUNMAO_JWT_RS_KID:-}
+      YUNMAO_JWT_RS_PRIVATE_KEY_PATH: ${YUNMAO_JWT_RS_PRIVATE_KEY_PATH:-}
+      YUNMAO_JWKS_ENDPOINTS: ${YUNMAO_JWKS_ENDPOINTS:-http://user-svc:8101/jwks.json}
+      YUNMAO_JWT_AUDIENCE: ${YUNMAO_JWT_AUDIENCE:-yunmao.gateway}
+      YUNMAO_ALLOW_GUEST: ${YUNMAO_ALLOW_GUEST:-true}
+      YUNMAO_TURN_SHARED_SECRET: ${YUNMAO_TURN_SHARED_SECRET:-}
+      YUNMAO_TURN_SHARED_SECRET_LEGACY: ${YUNMAO_TURN_SHARED_SECRET_LEGACY:-}
+      YUNMAO_STUN_URLS: ${YUNMAO_STUN_URLS:-stun:stun.l.google.com:19302}
+    ports:
+      - "8102:8102"
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      user-svc:
+        condition: service_started
+
+  feeding-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-feeding-svc:${TAG:-latest}
+    container_name: yunmao-feeding-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_FEEDING_LISTEN: ":8201"
+      YUNMAO_FEEDING_GRPC_LISTEN: ":9203"
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-staging:9092
+      YUNMAO_CACHE_BACKEND: redis
+      YUNMAO_REDIS_URL: redis://redis-staging:6379/0
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-staging:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+    ports:
+      - "8201:8201"
+      - "9203:9203"
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      redis-staging:
+        condition: service_healthy
+      kafka-staging:
+        condition: service_started
+
+  device-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-device-svc:${TAG:-latest}
+    container_name: yunmao-device-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_DEVICE_LISTEN: ":8103"
+      YUNMAO_FEEDING_GRPC_ADDR: feeding-svc:9203
+    ports:
+      - "8103:8103"
+    depends_on:
+      feeding-svc:
+        condition: service_started
+
+  billing-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-billing-svc:${TAG:-latest}
+    container_name: yunmao-billing-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_BILLING_LISTEN: ":8104"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-staging:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_ENABLE_WECHAT: ${YUNMAO_ENABLE_WECHAT:-false}
+      YUNMAO_ENABLE_ALIPAY: ${YUNMAO_ENABLE_ALIPAY:-false}
+      YUNMAO_ENABLE_APPLEIAP: ${YUNMAO_ENABLE_APPLEIAP:-false}
+    ports:
+      - "8104:8104"
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+
+  admin-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-admin-svc:${TAG:-latest}
+    container_name: yunmao-admin-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_ADMIN_LISTEN: ":8105"
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-staging:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+      YUNMAO_BILLING_URL: ${YUNMAO_BILLING_URL:-http://billing-svc:8104}
+      YUNMAO_ROOM_URL: ${YUNMAO_ROOM_URL:-http://room-svc:8102}
+      YUNMAO_JWT_KID: ${YUNMAO_JWT_KID:-}
+      YUNMAO_JWT_RS_PRIVATE_KEY_PATH: ${YUNMAO_JWT_RS_PRIVATE_KEY_PATH:-}
+      YUNMAO_ADMIN_PASSWORD: ${YUNMAO_ADMIN_PASSWORD:-}
+    ports:
+      - "8105:8105"
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      billing-svc:
+        condition: service_started
+      room-svc:
+        condition: service_started
+
+  chat-svc:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-chat-svc:${TAG:-latest}
+    container_name: yunmao-chat-svc-staging
+    restart: unless-stopped
+    environment:
+      YUNMAO_CHAT_LISTEN: ":8204"
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-staging:9092
+      YUNMAO_CACHE_BACKEND: redis
+      YUNMAO_REDIS_URL: redis://redis-staging:6379/0
+      YUNMAO_DB_URL: ${YUNMAO_DB_URL:-postgres://${YUNMAO_DB_USER:-yunmao}:${YUNMAO_DB_PASSWORD:-changeme}@postgres-staging:5432/${YUNMAO_DB_NAME:-yunmao}?sslmode=disable}
+    ports:
+      - "8204:8204"
+    depends_on:
+      postgres-staging:
+        condition: service_healthy
+      redis-staging:
+        condition: service_healthy
+      kafka-staging:
+        condition: service_started
+
+  media-edge:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-media-edge:${TAG:-latest}
+    container_name: yunmao-media-edge-staging
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,yunmao=debug}
+    ports:
+      - "1935:1935"
+      - "8080:8080"
+
+  gateway:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-gateway:${TAG:-latest}
+    container_name: yunmao-gateway-staging
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,yunmao=debug}
+      YUNMAO_GATEWAY_LISTEN: 0.0.0.0:8090
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-staging:9092
+      YUNMAO_JWKS_ENDPOINTS: ${YUNMAO_JWKS_ENDPOINTS:-http://user-svc:8101/jwks.json}
+      YUNMAO_JWT_SECRET: ${YUNMAO_JWT_SECRET:-}
+      YUNMAO_GATEWAY_ALLOW_GUEST: ${YUNMAO_GATEWAY_ALLOW_GUEST:-true}
+      YUNMAO_GATEWAY_GUEST_ROOMS: ${YUNMAO_GATEWAY_GUEST_ROOMS:-room_demo}
+    ports:
+      - "8090:8090"
+    depends_on:
+      user-svc:
+        condition: service_started
+      kafka-staging:
+        condition: service_started
+
+  device-edge:
+    image: ${REGISTRY:-registry.cn-hangzhou.aliyuncs.com/yunmao}/yunmao-device-edge:${TAG:-latest}
+    container_name: yunmao-device-edge-staging
+    restart: unless-stopped
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,yunmao=debug}
+      YUNMAO_DEVICE_EDGE_LISTEN: 0.0.0.0:8091
+      YUNMAO_EVENT_BUS: kafka
+      YUNMAO_KAFKA_BROKERS: kafka-staging:9092
+      YUNMAO_FEED_ACK_URL: ${YUNMAO_FEED_ACK_URL:-http://feeding-svc:8201/internal/feed-acks}
+    ports:
+      - "8091:8091"
+    depends_on:
+      feeding-svc:
+        condition: service_started
+      kafka-staging:
+        condition: service_started
+
+volumes:
+  staging_pg_data:
+  staging_redis_data:
+  staging_kafka_data:

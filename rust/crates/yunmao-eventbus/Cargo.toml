@@ -1,0 +1,30 @@
+[package]
+name = "yunmao-eventbus"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "yunmao 事件总线（Kafka / 内存），与 Go pkg/yunmao/eventbus 互通"
+
+[dependencies]
+yunmao-common.workspace = true
+tokio.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+bytes.workspace = true
+futures.workspace = true
+chrono = { version = "0.4", optional = true }
+rskafka = { version = "0.5", default-features = false, optional = true }
+
+[features]
+default = ["kafka"]
+kafka = ["dep:rskafka", "dep:chrono"]
+
+[dev-dependencies]
+tokio-test.workspace = true

@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package yunmao.feeding.v1;
+
+option go_package = "yunmao.live/proto/feeding/v1;feedingpb";
+
+import "google/protobuf/timestamp.proto";
+
+// FeedingService 内部 gRPC 接口（参见 04-设备接入数据模型与API边界.md 第 6 节）。
+//
+// MVP 阶段只列出最核心的几个 RPC，schema 兼容向前演进。
+service FeedingService {
+  // 校验并创建投喂请求；返回创建的 FeedRequest 与冷却信息。
+  rpc ValidateAndCreate (ValidateAndCreateRequest) returns (ValidateAndCreateResponse);
+  // 查询投喂请求当前状态。
+  rpc GetFeedRequest (GetFeedRequestRequest) returns (FeedRequest);
+}
+
+message ValidateAndCreateRequest {
+  string user_id = 1;
+  string room_id = 2;
+  uint32 amount_grams = 3;
+  string idempotency_key = 4;
+  // 客户端可选：把客户端时间戳带上，便于排障
+  google.protobuf.Timestamp client_time = 5;
+}
+
+message ValidateAndCreateResponse {
+  FeedRequest feed_request = 1;
+  // 当 status = REJECTED 时填，code 为 04 章错误码
+  string reject_code = 2;
+}
+
+message FeedRequest {
+  string feed_request_id = 1;
+  string user_id = 2;
+  string room_id = 3;
+  string device_id = 4;
+  uint32 amount_grams = 5;
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    CREATED = 1;
+    REJECTED = 2;
+    ACCEPTED = 3;
+    QUEUED = 4;
+    DISPATCHED = 5;
+    ACKNOWLEDGED = 6;
+    SUCCEEDED = 7;
+    FAILED = 8;
+    COMPENSATED = 9;
+  }
+  Status status = 6;
+  string reject_reason = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp completed_at = 9;
+}
+
+message GetFeedRequestRequest {
+  string feed_request_id = 1;
+}

@@ -1,0 +1,81 @@
+# yunmao 错误码字典（与 04-设备接入数据模型与API边界.md 第 11 节一致）。
+# 每行：code -> http、说明、建议、客户端策略。
+
+errors:
+  - code: AUTH.LOGIN_REQUIRED
+    http: 401
+    description: 未登录或会话失效
+    remediation: 触发登录流程
+  - code: AUTH.TOKEN_EXPIRED
+    http: 401
+    description: token 已过期
+    remediation: 刷新 token 重试
+  - code: AUTH.FORBIDDEN
+    http: 403
+    description: 当前用户不具备所需权限
+    remediation: 文案提示，不重试
+
+  - code: USER.NOT_FOUND
+    http: 404
+    description: 用户不存在
+
+  - code: ROOM.NOT_FOUND
+    http: 404
+    description: 房间不存在
+  - code: ROOM.OFFLINE
+    http: 503
+    description: 房间离线或维护中
+
+  - code: FEED.COOLDOWN_NOT_FINISHED
+    http: 409
+    description: 投喂冷却中
+    remediation: 等待冷却结束
+  - code: FEED.HEALTH_LIMIT_HIT
+    http: 409
+    description: 单猫每日健康上限已达
+  - code: FEED.DEVICE_OFFLINE
+    http: 409
+    description: 设备离线，暂不可投喂
+  - code: FEED.NO_FEED_WINDOW
+    http: 409
+    description: 当前在禁投喂时间窗
+  - code: FEED.DUPLICATE_REQUEST
+    http: 409
+    description: 已存在相同幂等键的请求
+
+  - code: DEVICE.UNBOUND
+    http: 409
+    description: 房间未绑定设备
+  - code: DEVICE.ERROR_JAMMED
+    http: 409
+    description: 设备卡粮，已停止自动重试
+
+  - code: MEDIA.STREAM_OFFLINE
+    http: 503
+    description: 直播流不在线
+  - code: MEDIA.PROFILE_UNAVAILABLE
+    http: 503
+    description: 该清晰度暂不可用
+
+  - code: PAY.ORDER_PAID
+    http: 409
+    description: 订单已支付
+  - code: PAY.AMOUNT_MISMATCH
+    http: 409
+    description: 金额校验失败
+
+  - code: RISK.ACTION_BLOCKED
+    http: 403
+    description: 风控拒绝
+    remediation: 不展示风控细节
+
+  - code: SYSTEM.RATE_LIMITED
+    http: 429
+    description: 请求过快
+    remediation: 按 Retry-After 退避
+  - code: SYSTEM.INTERNAL
+    http: 500
+    description: 内部错误
+  - code: SYSTEM.DEPENDENCY_UNAVAILABLE
+    http: 503
+    description: 上游依赖不可用

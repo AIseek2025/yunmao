@@ -1,0 +1,98 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao LL-HLS / QoE",
+  "uid": "yunmao-ll-hls-qoe",
+  "version": 1,
+  "tags": ["yunmao", "media-edge", "ll-hls", "qoe"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Active LL-HLS rooms",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "count(media_edge_ll_hls_manifest_requests_total) by (room_id)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Playlist requests / sec",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "rate(media_edge_ll_hls_manifest_requests_total[1m])", "refId": "A", "legendFormat": "{{room_id}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Part / segment serve rate",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "rate(media_edge_ll_hls_part_serve_total[1m])", "refId": "A", "legendFormat": "part {{room_id}}" },
+        { "expr": "rate(media_edge_ll_hls_chunk_requests_total[1m])", "refId": "B", "legendFormat": "segment {{room_id}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Blocking playlist reload wait (P50/P95)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(media_edge_ll_hls_playlist_block_seconds_bucket[5m])) by (le))", "refId": "A", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(media_edge_ll_hls_playlist_block_seconds_bucket[5m])) by (le))", "refId": "B", "legendFormat": "P95" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Stream start latency (publish→first part)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(media_edge_stream_start_latency_seconds_bucket[5m])) by (le))", "refId": "A", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(media_edge_stream_start_latency_seconds_bucket[5m])) by (le))", "refId": "B", "legendFormat": "P95" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Resolution / codecs per room (QoE)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "media_edge_qoe_video_height", "refId": "A", "legendFormat": "{{room_id}} video_h" },
+        { "expr": "media_edge_qoe_video_width", "refId": "B", "legendFormat": "{{room_id}} video_w" },
+        { "expr": "media_edge_qoe_audio_present", "refId": "C", "legendFormat": "{{room_id}} audio?" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Source bitrate (bps)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        { "expr": "media_edge_qoe_source_bitrate_bps", "refId": "A", "legendFormat": "{{room_id}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "ABR active ladder size",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        { "expr": "media_edge_qoe_abr_active_ladder", "refId": "A", "legendFormat": "{{room_id}}" }
+      ]
+    }
+  ]
+}

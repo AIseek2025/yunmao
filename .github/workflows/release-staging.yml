@@ -1,0 +1,564 @@
+name: Release to Staging
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (skip deployment)"
+        required: false
+        default: "false"
+
+env:
+  REGISTRY: registry.cn-hangzhou.aliyuncs.com/yunmao
+  DEPLOY_HOST: ops@staging.yunmao.live
+  DEPLOY_PATH: ~/yunmao
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # ============================================================================
+  # 1. 运行测试（unit + integration）
+  # ============================================================================
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run Go tests
+        working-directory: go
+        run: make test
+
+      - name: Run Rust tests
+        working-directory: rust
+        run: make test
+
+      - name: Run integration tests
+        if: success()
+        run: |
+          mkdir -p reports/integration
+          cd go/test/e2e && INTEGRATION=1 go test -tags=integration ./... \
+            -v -timeout 15m 2>&1 | tee ../../../reports/integration/staging-ci.log
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            reports/integration/*.log
+            reports/integration/*.json
+
+  # ============================================================================
+  # 2. 构建 Docker 镜像
+  # ============================================================================
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to Aliyun Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: registry.cn-hangzhou.aliyuncs.com
+          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
+          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+
+      - name: Get commit hash
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build and push all services
+        run: |
+          export TAG=${{ steps.vars.outputs.sha_short }}
+          make docker-build-all
+          make docker-push-all
+
+      - name: Tag as latest
+        run: |
+          TAG=${{ steps.vars.outputs.sha_short }}
+          for svc in user-svc room-svc device-svc billing-svc admin-svc feeding-svc chat-svc; do
+            docker tag $REGISTRY/yunmao-$svc:$TAG $REGISTRY/yunmao-$svc:latest
+            docker push $REGISTRY/yunmao-$svc:latest
+          done
+          for bin in yunmao-media-edge yunmao-gateway yunmao-device-edge; do
+            docker tag $REGISTRY/$bin:$TAG $REGISTRY/$bin:latest
+            docker push $REGISTRY/$bin:latest
+          done
+
+  # ============================================================================
+  # 3. 部署到 Staging
+  # ============================================================================
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event.inputs.dry_run != 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+
+      - name: Deploy to staging server
+        run: |
+          export TAG=$(git rev-parse --short HEAD)
+          make deploy-staging
+
+      - name: Collect remote compose status
+        if: always()
+        run: |
+          mkdir -p reports/staging_deploy
+          ssh ${{ env.DEPLOY_HOST }} "cd ${{ env.DEPLOY_PATH }} && docker compose -f deploy/docker-compose.staging.yml --env-file .env ps" \
+            | tee reports/staging_deploy/compose-ps.txt || true
+          ssh ${{ env.DEPLOY_HOST }} "cd ${{ env.DEPLOY_PATH }} && docker compose -f deploy/docker-compose.staging.yml --env-file .env images" \
+            | tee reports/staging_deploy/compose-images.txt || true
+
+      - name: Collect remote logs tail
+        if: always()
+        run: |
+          mkdir -p reports/staging_deploy
+          ssh ${{ env.DEPLOY_HOST }} "cd ${{ env.DEPLOY_PATH }} && docker compose -f deploy/docker-compose.staging.yml --env-file .env logs --tail=80 user-svc room-svc device-svc billing-svc admin-svc feeding-svc media-edge gateway device-edge" \
+            | tee reports/staging_deploy/service-logs-tail.txt || true
+
+      - name: Run smoke tests
+        run: |
+          mkdir -p reports/staging_deploy
+          ssh ${{ env.DEPLOY_HOST }} "cd ${{ env.DEPLOY_PATH }} && make deploy-smoke-staging" \
+            | tee reports/staging_deploy/deploy-smoke.txt
+
+      - name: Build structured deploy summary
+        if: always()
+        run: |
+          python3 <<'PY'
+          import json
+          import os
+          import re
+          import time
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root = Path("reports/staging_deploy")
+          compose_path = root / "compose-ps.txt"
+          compose_images_path = root / "compose-images.txt"
+          logs_path = root / "service-logs-tail.txt"
+          smoke_path = root / "deploy-smoke.txt"
+          summary_json_path = root / "staging_deploy_summary.json"
+          summary_md_path = root / "staging_deploy_summary.md"
+          github_sha = os.environ.get("GITHUB_SHA", "")
+          github_run_id = os.environ.get("GITHUB_RUN_ID", "")
+          github_run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "")
+          github_workflow = os.environ.get("GITHUB_WORKFLOW", "")
+          github_job = os.environ.get("GITHUB_JOB", "deploy")
+          deploy_host = os.environ.get("DEPLOY_HOST", "")
+          deploy_path = os.environ.get("DEPLOY_PATH", "")
+
+          def iso_now() -> str:
+              return datetime.now(timezone.utc).isoformat()
+
+          def short_sha(value: str) -> str:
+              return value[:7] if value else ""
+
+          def read_text(path: Path) -> str:
+              if not path.exists():
+                  return ""
+              return path.read_text(encoding="utf-8", errors="replace")
+
+          def parse_compose_ps(text: str) -> list[dict]:
+              services = []
+              lines = text.splitlines()
+              header_idx = None
+              headers = []
+              for idx, line in enumerate(lines):
+                  if "SERVICE" in line and "STATUS" in line:
+                      header_idx = idx
+                      headers = re.split(r"\s{2,}", line.strip())
+                      break
+              if header_idx is None:
+                  return services
+
+              try:
+                  service_idx = headers.index("SERVICE")
+              except ValueError:
+                  service_idx = 0
+              try:
+                  status_idx = headers.index("STATUS")
+              except ValueError:
+                  status_idx = max(len(headers) - 1, 0)
+
+              for line in lines[header_idx + 1:]:
+                  if not line.strip() or set(line.strip()) == {"-"}:
+                      continue
+                  parts = re.split(r"\s{2,}", line.strip())
+                  if len(parts) <= max(service_idx, status_idx):
+                      continue
+                  service = parts[service_idx]
+                  status = parts[status_idx]
+                  lowered = status.lower()
+                  healthy = None
+                  if any(token in lowered for token in ("unhealthy", "exited", "dead", "failed")):
+                      healthy = False
+                  elif any(token in lowered for token in ("healthy", "running", "up", "started")):
+                      healthy = True
+                  services.append(
+                      {
+                          "service": service,
+                          "status": status,
+                          "healthy": healthy,
+                          "raw": line.strip(),
+                      }
+                  )
+              return services
+
+          def parse_smoke(text: str) -> tuple[list[dict], bool]:
+              checks = []
+              pending = None
+              saw_success_footer = False
+              for raw in text.splitlines():
+                  line = raw.strip()
+                  match = re.match(
+                      r"checking\s+([A-Za-z0-9._-]+)\s+localhost:(\d+)(/[^\s]+)",
+                      line,
+                  )
+                  if match:
+                      pending = {
+                          "service": match.group(1),
+                          "port": int(match.group(2)),
+                          "endpoint": match.group(3),
+                          "ok": None,
+                          "detail": "",
+                          "raw": raw,
+                      }
+                      continue
+                  if line == "OK" and pending is not None:
+                      pending["ok"] = True
+                      pending["detail"] = "OK"
+                      checks.append(pending)
+                      pending = None
+                      continue
+                  if line.startswith("FAIL:") and pending is not None:
+                      pending["ok"] = False
+                      pending["detail"] = line
+                      checks.append(pending)
+                      pending = None
+                      continue
+                  if "All smoke tests passed" in line:
+                      saw_success_footer = True
+
+              if pending is not None:
+                  pending["ok"] = False
+                  pending["detail"] = pending["detail"] or "Incomplete smoke check result"
+                  checks.append(pending)
+
+              return checks, saw_success_footer
+
+          compose_services = parse_compose_ps(read_text(compose_path))
+          smoke_checks, smoke_footer_ok = parse_smoke(read_text(smoke_path))
+
+          compose_unhealthy = [
+              item["service"] for item in compose_services if item["healthy"] is False
+          ]
+          compose_unknown = [
+              item["service"] for item in compose_services if item["healthy"] is None
+          ]
+          smoke_failed = [item["service"] for item in smoke_checks if item["ok"] is False]
+          smoke_pass_count = sum(1 for item in smoke_checks if item["ok"] is True)
+          smoke_passed = bool(smoke_checks) and not smoke_failed
+          if smoke_footer_ok:
+              smoke_passed = smoke_passed and True
+
+          evidence_missing = []
+          if not compose_services:
+              evidence_missing.append("compose_ps")
+          if not smoke_checks:
+              evidence_missing.append("deploy_smoke")
+
+          validation_status = (
+              "passed"
+              if not evidence_missing and not compose_unhealthy and smoke_passed
+              else "failed"
+          )
+          if validation_status == "passed":
+              outcome_status = "deployed_and_validated"
+              finish_state = "completed"
+              finish_reason = "staging deploy evidence and smoke validation passed"
+          elif evidence_missing:
+              outcome_status = "deployment_evidence_incomplete"
+              finish_state = "waiting_for_followup"
+              finish_reason = "missing deploy evidence: " + ", ".join(evidence_missing)
+          else:
+              outcome_status = "deployed_with_validation_failures"
+              finish_state = "waiting_for_followup"
+              finish_reason = "staging deploy completed but validation failed"
+
+          total_compose_checks = len(compose_services)
+          compose_pass_count = max(total_compose_checks - len(compose_unhealthy), 0)
+          compose_ratio = (
+              compose_pass_count / total_compose_checks if total_compose_checks else 0.0
+          )
+          smoke_ratio = smoke_pass_count / len(smoke_checks) if smoke_checks else 0.0
+          health_score = int(round(((compose_ratio + smoke_ratio) / 2.0) * 100))
+          if evidence_missing:
+              health_score = min(health_score, 40)
+
+          validation_summary = (
+              f"compose={compose_pass_count}/{total_compose_checks} healthy_or_running, "
+              f"smoke={smoke_pass_count}/{len(smoke_checks)} passed, "
+              f"missing={','.join(evidence_missing) if evidence_missing else 'none'}"
+          )
+
+          source_artifacts = [
+              str(compose_path),
+              str(compose_images_path),
+              str(logs_path),
+              str(smoke_path),
+              str(summary_json_path),
+              str(summary_md_path),
+          ]
+          read_first_paths = [
+              str(summary_md_path),
+              str(compose_path),
+              str(smoke_path),
+          ]
+
+          overall_ok = (
+              bool(compose_services)
+              and not compose_unhealthy
+              and smoke_passed
+              and not smoke_failed
+          )
+
+          summary = {
+              "kind": "codemaster_deploy_summary",
+              "schema_version": "deploy_summary_v1",
+              "label": f"staging-deploy-{short_sha(github_sha) or 'unknown'}",
+              "trace_id": (
+                  f"{github_run_id}:{github_run_attempt}:{github_job}"
+                  if github_run_id
+                  else f"local:{github_job}"
+              ),
+              "workspace_root": deploy_path or os.environ.get("GITHUB_WORKSPACE", ""),
+              "environment": "staging",
+              "service_name": "yunmao",
+              "workflow_name": github_workflow,
+              "job_name": github_job,
+              "deploy_host": deploy_host,
+              "commit_sha": github_sha,
+              "deployed_at": iso_now(),
+              "updated_at_epoch": time.time(),
+              "outcome_status": outcome_status,
+              "finish_state": finish_state,
+              "finish_reason": finish_reason,
+              "health_score": health_score,
+              "validation_status": validation_status,
+              "validation_summary": validation_summary,
+              "blocking_issue_count": len(compose_unhealthy) + len(smoke_failed) + len(evidence_missing),
+              "required_followup_count": len(compose_unhealthy) + len(smoke_failed) + len(evidence_missing),
+              "pass_count": compose_pass_count + smoke_pass_count,
+              "fail_count": len(compose_unhealthy) + len(smoke_failed),
+              "read_first_paths": read_first_paths,
+              "source_artifacts": source_artifacts,
+              "sources": {
+                  "compose_ps": str(compose_path),
+                  "compose_images": str(compose_images_path),
+                  "logs_tail": str(logs_path),
+                  "deploy_smoke": str(smoke_path),
+              },
+              "compose_services": compose_services,
+              "smoke_checks": smoke_checks,
+              "overall": {
+                  "status": "pass" if overall_ok else "fail",
+                  "compose_service_count": len(compose_services),
+                  "compose_healthy_services": compose_pass_count,
+                  "compose_unhealthy_services": compose_unhealthy,
+                  "compose_unknown_services": compose_unknown,
+                  "smoke_check_count": len(smoke_checks),
+                  "smoke_passed_count": smoke_pass_count,
+                  "smoke_failed_services": smoke_failed,
+                  "smoke_footer_ok": smoke_footer_ok,
+                  "smoke_passed": smoke_passed,
+                  "evidence_missing": evidence_missing,
+              },
+          }
+
+          summary_json_path.write_text(
+              json.dumps(summary, ensure_ascii=True, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          def render_health(value):
+              if value is True:
+                  return "yes"
+              if value is False:
+                  return "no"
+              return "unknown"
+
+          lines = [
+              "# Staging Deploy Summary",
+              "",
+              f"- Kind: `{summary['kind']}`",
+              f"- Schema Version: `{summary['schema_version']}`",
+              f"- Label: `{summary['label']}`",
+              f"- Environment: `{summary['environment']}`",
+              f"- Outcome Status: `{summary['outcome_status']}`",
+              f"- Finish State: `{summary['finish_state']}`",
+              f"- Validation Status: `{summary['validation_status']}`",
+              f"- Validation Summary: `{summary['validation_summary']}`",
+              f"- Health Score: `{summary['health_score']}`",
+              f"- Overall: {'PASS' if overall_ok else 'FAIL'}",
+              f"- Compose services parsed: {len(compose_services)}",
+              f"- Compose unhealthy: {', '.join(compose_unhealthy) if compose_unhealthy else 'none'}",
+              f"- Compose unknown: {', '.join(compose_unknown) if compose_unknown else 'none'}",
+              f"- Smoke checks parsed: {len(smoke_checks)}",
+              f"- Smoke failed: {', '.join(smoke_failed) if smoke_failed else 'none'}",
+              f"- Smoke footer: {'present' if smoke_footer_ok else 'missing'}",
+              f"- Evidence missing: {', '.join(evidence_missing) if evidence_missing else 'none'}",
+              "",
+              "## Read First",
+              "",
+          ]
+
+          for path in read_first_paths:
+              lines.append(f"- `{path}`")
+
+          lines.extend(
+              [
+                  "",
+                  "## Compose Services",
+                  "",
+                  "| Service | Status | Healthy |",
+                  "| --- | --- | --- |",
+              ]
+          )
+
+          if compose_services:
+              for item in compose_services:
+                  lines.append(
+                      f"| {item['service']} | {item['status']} | {render_health(item['healthy'])} |"
+                  )
+          else:
+              lines.append("| n/a | compose-ps not parsed | unknown |")
+
+          lines.extend(
+              [
+                  "",
+                  "## Smoke Checks",
+                  "",
+                  "| Service | Port | Endpoint | Result |",
+                  "| --- | --- | --- | --- |",
+              ]
+          )
+
+          if smoke_checks:
+              for item in smoke_checks:
+                  result = "pass" if item["ok"] else f"fail ({item['detail']})"
+                  lines.append(
+                      f"| {item['service']} | {item['port']} | {item['endpoint']} | {result} |"
+                  )
+          else:
+              lines.append("| n/a | n/a | n/a | smoke output not parsed |")
+
+          summary_md_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload deploy evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-deploy-evidence
+          path: reports/staging_deploy/
+
+      - name: Summarize deploy evidence
+        if: always()
+        run: |
+          echo "## Remote Staging Evidence" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Artifact: \`staging-deploy-evidence\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Compose status: \`reports/staging_deploy/compose-ps.txt\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Compose images: \`reports/staging_deploy/compose-images.txt\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Logs tail: \`reports/staging_deploy/service-logs-tail.txt\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Smoke output: \`reports/staging_deploy/deploy-smoke.txt\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Structured summary JSON: \`reports/staging_deploy/staging_deploy_summary.json\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Structured summary MD: \`reports/staging_deploy/staging_deploy_summary.md\`" >> $GITHUB_STEP_SUMMARY
+          if [ -f reports/staging_deploy/staging_deploy_summary.md ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Structured Summary" >> $GITHUB_STEP_SUMMARY
+            cat reports/staging_deploy/staging_deploy_summary.md >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f reports/staging_deploy/compose-ps.txt ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Compose PS" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            tail -n 20 reports/staging_deploy/compose-ps.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f reports/staging_deploy/deploy-smoke.txt ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Smoke Tail" >> $GITHUB_STEP_SUMMARY
+            echo '```text' >> $GITHUB_STEP_SUMMARY
+            tail -n 30 reports/staging_deploy/deploy-smoke.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # ============================================================================
+  # 4. 部署报告
+  # ============================================================================
+  report:
+    name: Deployment Report
+    runs-on: ubuntu-latest
+    needs: [test, build, deploy]
+    if: always()
+    steps:
+      - name: Report status
+        run: |
+          echo "## Staging Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests**: ${{ needs.test.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build**: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy**: ${{ needs.deploy.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy Evidence Artifact**: staging-deploy-evidence" >> $GITHUB_STEP_SUMMARY
+          echo "- **Structured Summary Files**: reports/staging_deploy/staging_deploy_summary.json, reports/staging_deploy/staging_deploy_summary.md" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Deployment successful" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Deployment failed" >> $GITHUB_STEP_SUMMARY
+          fi

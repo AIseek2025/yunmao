@@ -1,0 +1,24 @@
+# Buf 模块定义。yunmao 当前用单模块（`proto/` 根目录）；
+# 等到外部 SDK 拆仓时再拆 module。
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    # 第二轮先保留 proto/<service>/v1/<file>.proto 目录布局，避免一次性 break 现有引用。
+    # 等团队接入 BSR / 多语言 SDK 时再做迁移到 proto/yunmao/<service>/v1/。
+    - DIRECTORY_SAME_PACKAGE
+    - PACKAGE_DIRECTORY_MATCH
+    # 服务命名当前与文档（04 章 6 节）对齐；暂不强制 Request/Response 后缀
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    # 包内已显式带 v1；DEFAULT 仍要求 v1 后缀放在文件路径，不一定需要
+    - PACKAGE_VERSION_SUFFIX
+    # FeedRequest.Status 枚举值名沿用领域语义（与状态机 / Go 端 const 对齐）
+    - ENUM_VALUE_PREFIX
+breaking:
+  use:
+    - FILE

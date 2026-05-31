@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package yunmao.device.v1;
+option go_package = "yunmao.live/proto/device/v1;devicepb";
+
+import "google/protobuf/timestamp.proto";
+
+service DeviceControlService {
+  rpc DispatchCommand (DispatchCommandRequest) returns (DispatchCommandResponse);
+  rpc ReportTelemetry (ReportTelemetryRequest) returns (ReportTelemetryResponse);
+}
+
+message DispatchCommandRequest {
+  string device_command_id = 1;
+  string feed_request_id = 2;
+  string device_id = 3;
+  string room_id = 4;
+  uint32 amount_grams = 5;
+  uint32 motor_duration_ms = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+message DispatchCommandResponse {
+  bool accepted = 1;
+}
+
+message ReportTelemetryRequest {
+  string device_id = 1;
+  uint32 remaining_food_grams = 2;
+  uint32 battery_percent = 3;
+  string firmware_version = 4;
+  google.protobuf.Timestamp reported_at = 5;
+}
+message ReportTelemetryResponse {}

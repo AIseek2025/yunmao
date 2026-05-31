@@ -1,0 +1,108 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao Gateway Fanout",
+  "uid": "yunmao-gateway-fanout",
+  "version": 1,
+  "tags": ["yunmao", "gateway", "websocket"],
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Open WS connections (all instances)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(gateway_connections_open)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Subscriptions total",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(gateway_subscriptions_open)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Rooms with at least 1 subscriber",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "sum(gateway_rooms_active)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Fanout backend mix (local vs redis)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "sum(rate(gateway_fanout_local_delivered_total[1m]))", "refId": "A", "legendFormat": "local" },
+        { "expr": "sum(rate(gateway_fanout_redis_delivered_total[1m]))", "refId": "B", "legendFormat": "redis" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Connection rate (open/close)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "rate(gateway_connections_total[1m])", "refId": "A", "legendFormat": "new/s {{instance}}" },
+        { "expr": "rate(gateway_disconnects_total[1m])", "refId": "B", "legendFormat": "close/s {{instance}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Pub/sub fan-out latency (P50/P95/P99)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(gateway_fanout_latency_seconds_bucket[5m])) by (le))", "refId": "A", "legendFormat": "P50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(gateway_fanout_latency_seconds_bucket[5m])) by (le))", "refId": "B", "legendFormat": "P95" },
+        { "expr": "histogram_quantile(0.99, sum(rate(gateway_fanout_latency_seconds_bucket[5m])) by (le))", "refId": "C", "legendFormat": "P99" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Publish QPS",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "rate(gateway_publish_total[1m])", "refId": "A", "legendFormat": "{{event_type}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Auth ok / fail",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        { "expr": "rate(gateway_auth_ok_total[1m])", "refId": "A", "legendFormat": "ok/s" },
+        { "expr": "rate(gateway_auth_fail_total[1m])", "refId": "B", "legendFormat": "fail/s" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Per-instance open connections",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "gateway_connections_open", "refId": "A", "legendFormat": "{{instance}}" }
+      ]
+    }
+  ]
+}

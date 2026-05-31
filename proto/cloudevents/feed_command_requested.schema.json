@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yunmao.live/schemas/feed.command.requested/v1.json",
+  "title": "feed.command.requested data v1",
+  "type": "object",
+  "required": [
+    "feed_request_id",
+    "device_command_id",
+    "device_id",
+    "room_id",
+    "amount_grams",
+    "motor_duration_ms",
+    "expires_at"
+  ],
+  "properties": {
+    "feed_request_id": { "type": "string" },
+    "device_command_id": { "type": "string" },
+    "device_id": { "type": "string" },
+    "room_id": { "type": "string" },
+    "amount_grams": { "type": "integer", "minimum": 1, "maximum": 200 },
+    "motor_duration_ms": { "type": "integer", "minimum": 100, "maximum": 5000 },
+    "expires_at": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

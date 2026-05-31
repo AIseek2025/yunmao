@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package yunmao.user.v1;
+option go_package = "yunmao.live/proto/user/v1;userpb";
+
+import "google/protobuf/timestamp.proto";
+
+service UserService {
+  rpc StartSmsLogin (StartSmsLoginRequest) returns (StartSmsLoginResponse);
+  rpc CompleteSmsLogin (CompleteSmsLoginRequest) returns (CompleteSmsLoginResponse);
+  rpc GetUser (GetUserRequest) returns (User);
+}
+
+message User {
+  string id = 1;
+  string nickname = 2;
+  string phone_hash = 3;
+  string role = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message StartSmsLoginRequest {
+  string phone_e164 = 1;
+}
+message StartSmsLoginResponse {
+  string challenge_id = 1;
+  uint32 expires_in_seconds = 2;
+}
+
+message CompleteSmsLoginRequest {
+  string challenge_id = 1;
+  string code = 2;
+  string client_type = 3;  // web | ios | android
+}
+message CompleteSmsLoginResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  User user = 3;
+}
+
+message GetUserRequest { string id = 1; }

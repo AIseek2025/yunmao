@@ -1,0 +1,33 @@
+[package]
+name = "yunmao-device-edge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "设备边缘 / 模拟设备：按 device_id 串行执行投喂指令"
+
+[[bin]]
+name = "yunmao-device-edge"
+path = "src/main.rs"
+
+[dependencies]
+yunmao-common.workspace = true
+yunmao-protocol.workspace = true
+yunmao-eventbus = { path = "../yunmao-eventbus" }
+yunmao-redis = { path = "../yunmao-redis" }
+tokio.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+ulid.workspace = true
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+hyper.workspace = true

@@ -1,0 +1,113 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "Yunmao Overview",
+  "uid": "yunmao-overview",
+  "version": 2,
+  "tags": ["yunmao"],
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Media-edge publish rooms",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "sum(media_edge_publish_rooms)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Media-edge FLV subscribers",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "sum(media_edge_flv_subscribers)", "refId": "A" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "FLV bytes out / sec",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "rate(media_edge_flv_bytes_out_total[1m])", "refId": "A", "legendFormat": "FLV bytes/s" },
+        { "expr": "rate(media_edge_flv_tags_out_total[1m])", "refId": "B", "legendFormat": "FLV tags/s" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Gateway WebSocket connections",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "sum(gateway_connections_open)", "refId": "A", "legendFormat": "open" },
+        { "expr": "rate(gateway_connections_total[1m])", "refId": "B", "legendFormat": "new/s" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Gateway pub/sub throughput",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "rate(gateway_publish_total[1m])", "refId": "A", "legendFormat": "publish/s" },
+        { "expr": "rate(gateway_subscribe_total[1m])", "refId": "B", "legendFormat": "subscribe/s" },
+        { "expr": "rate(gateway_kafka_fanout_total[1m])", "refId": "C", "legendFormat": "kafka fanout/s" },
+        { "expr": "rate(gateway_kafka_fanout_delivered_total[1m])", "refId": "D", "legendFormat": "delivered/s" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Gateway auth",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        { "expr": "rate(gateway_auth_ok_total[1m])", "refId": "A", "legendFormat": "auth ok/s" },
+        { "expr": "rate(gateway_auth_fail_total[1m])", "refId": "B", "legendFormat": "auth fail/s" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Feeding requests + state transitions",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "rate(yunmao_feed_requests_total[1m])", "refId": "A", "legendFormat": "requests/s" },
+        { "expr": "rate(yunmao_feed_state_transitions_total[1m])", "refId": "B", "legendFormat": "transitions/s" },
+        { "expr": "rate(yunmao_feed_cooldown_blocked_total[1m])", "refId": "C", "legendFormat": "cooldown blocked/s" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Kafka publish (feeding-svc)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "targets": [
+        { "expr": "rate(yunmao_eventbus_publish_total[1m])", "refId": "A", "legendFormat": "{{topic}}" },
+        { "expr": "rate(yunmao_eventbus_publish_errors_total[1m])", "refId": "B", "legendFormat": "errors/s" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "LL-HLS interest (manifest + chunk requests)",
+      "datasource": { "type": "prometheus", "uid": "yunmao-prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 28 },
+      "targets": [
+        { "expr": "sum(rate(media_edge_ll_hls_manifest_requests_total[5m]))", "refId": "A", "legendFormat": "manifest/s" },
+        { "expr": "sum(rate(media_edge_ll_hls_chunk_requests_total[5m]))", "refId": "B", "legendFormat": "chunk/s" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+# Admin 前端 Dockerfile（pnpm + standalone）
+# 构建命令：docker build -t yunmao/admin:latest -f deploy/Dockerfile.admin clients/admin/
+FROM node:20-alpine AS builder
+ARG YUNMAO_ADMIN_BASE_PATH=/admin
+ARG NEXT_PUBLIC_ADMIN_API_BASE=https://yunmao.net.cn/admin-api
+ARG NEXT_PUBLIC_AUTH_API_BASE=https://yunmao.net.cn/admin-api
+ENV YUNMAO_ADMIN_BASE_PATH=${YUNMAO_ADMIN_BASE_PATH}
+ENV NEXT_PUBLIC_ADMIN_API_BASE=${NEXT_PUBLIC_ADMIN_API_BASE}
+ENV NEXT_PUBLIC_AUTH_API_BASE=${NEXT_PUBLIC_AUTH_API_BASE}
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+RUN mkdir -p public && pnpm build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3100
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+EXPOSE 3100
+CMD ["node", "server.js"]

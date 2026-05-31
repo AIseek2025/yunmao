@@ -1,0 +1,78 @@
+name: Phase A Verification
+
+on:
+  push:
+    branches: [main, "iteration-277-and-beyond", "feature/**"]
+    paths:
+      - "rust/**"
+      - "go/**"
+      - "clients/web/**"
+      - "clients/admin/**"
+      - ".github/workflows/phase-a-verify.yml"
+      - "scripts/phase-a-verify.sh"
+      - "scripts/validate-ci-workflows.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust/**"
+      - "go/**"
+      - "clients/web/**"
+      - "clients/admin/**"
+      - ".github/workflows/phase-a-verify.yml"
+      - "scripts/phase-a-verify.sh"
+      - "scripts/validate-ci-workflows.sh"
+
+jobs:
+  phase-a-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.10.0
+
+      - name: Install web dependencies
+        working-directory: clients/web
+        run: pnpm install --frozen-lockfile
+
+      - name: Install admin dependencies
+        working-directory: clients/admin
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Phase A verification (11 gates)
+        run: |
+          mkdir -p reports/phase-a-evidence
+          bash scripts/phase-a-verify.sh reports/phase-a-evidence
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase-a-evidence
+          path: reports/phase-a-evidence/
+          retention-days: 30

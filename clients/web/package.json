@@ -1,0 +1,45 @@
+{
+  "name": "@yunmao/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@9.10.0",
+  "scripts": {
+    "dev": "next dev --turbo --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "e2e": "playwright test",
+    "openapi-gen": "openapi-typescript ../../go/pkg/yunmao/openapi/v3.json -o src/lib/generated-api.ts --export-type"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.59.0",
+    "hls.js": "^1.5.15",
+    "next": "15.0.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@tailwindcss/postcss": "^4.0.0-alpha.30",
+    "@types/node": "^22.7.4",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.11.1",
+    "eslint-config-next": "15.0.0",
+    "jsdom": "^25.0.1",
+    "openapi-typescript": "^7.13.0",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^4.0.0-alpha.30",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}

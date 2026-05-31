@@ -1,0 +1,20 @@
+# Buf 代码生成配置（仅 Go；Rust 端通过 yunmao-protocol 手写 + serde 维持互通）。
+#
+# 使用本地 protoc-gen-go / protoc-gen-go-grpc（go install 安装）。
+# 等团队需要把生成产物推送到 BSR 时，再切换为 `remote:` plugin 引用。
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: yunmao.live/proto
+plugins:
+  - local: protoc-gen-go
+    out: ../go/proto
+    opt:
+      - paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: ../go/proto
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=false
